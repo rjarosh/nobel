@@ -1,0 +1,1209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nobel Peace Prize Mention Analysis - Reactive Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f4f7fb;
+      --card: #ffffff;
+      --ink: #172033;
+      --muted: #657187;
+      --line: #e1e7f0;
+      --accent: #3768d8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px 18px 56px;
+      background: var(--page);
+      color: var(--ink);
+      font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { max-width: 1100px; margin: 0 auto; }
+    header { margin-bottom: 24px; }
+    h1 { margin: 0 0 8px; font-size: clamp(1.8rem, 4vw, 2.4rem); letter-spacing: -.03em; }
+    h2 { margin: 0 0 6px; font-size: 1.15rem; }
+    p { color: var(--muted); margin-top: 0; }
+    .eyebrow { margin: 0 0 4px; color: var(--accent); font-size: .75rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    
+    .filter-card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+      padding: 20px; margin-bottom: 24px; box-shadow: 0 5px 20px rgba(24, 42, 74, .035);
+    }
+    .slider-group { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+    .slider-row { display: flex; align-items: center; gap: 14px; }
+    .slider-row label { font-weight: 700; min-width: 80px; font-size: .9rem; }
+    input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    output { min-width: 5.5rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+    
+    .preset-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .preset-btn {
+      border: 1px solid var(--line); background: #f0f4f9; color: var(--ink);
+      border-radius: 8px; padding: 6px 12px; font-size: .85rem; font-weight: 600; cursor: pointer;
+      transition: background .15s;
+    }
+    .preset-btn:hover { background: #e2e8f4; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .kpi-card { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 16px; text-align: center; }
+    .kpi-value { font-size: 1.8rem; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .kpi-label { font-size: .82rem; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .card {
+      min-width: 0; padding: 22px; background: var(--card);
+      border: 1px solid var(--line); border-radius: 16px;
+      box-shadow: 0 5px 20px rgba(24, 42, 74, .035);
+    }
+    .wide { grid-column: 1 / -1; }
+    .note { margin: 4px 0 16px; font-size: .88rem; }
+    .chart { width: 100%; min-width: 0; min-height: 180px; }
+    
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; color: var(--muted); font-size: .82rem; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+    /* Timeline styling */
+    .timeline-wrapper { position: relative; width: 100%; overflow-x: auto; padding: 10px 0; }
+    .timeline-svg { width: 100%; height: 130px; display: block; overflow: visible; }
+    .timeline-dot {
+      cursor: pointer;
+      pointer-events: all;
+    }
+    .timeline-dot circle {
+      transition: transform .15s, filter .15s;
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+    .timeline-dot:hover circle {
+      transform: scale(1.3);
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,.3));
+    }
+
+    /* Pie Chart Styling */
+    .pie-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .pie-slice {
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
+      transform-origin: center;
+    }
+    .pie-slice:hover {
+      opacity: 0.95;
+    }
+    .pie-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .pie-legend-item.highlighted {
+      background: #f0f4f9;
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    /* Interactive Details Panel */
+    .pie-details-panel {
+      min-height: 52px;
+      margin-top: 8px;
+      padding: 8px 16px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      text-align: center;
+      width: 100%;
+      max-width: 320px;
+    }
+    .pie-details-title {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+    .pie-details-stats {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    /* Line Chart Styling */
+    .line-chart-container {
+      position: relative;
+      width: 100%;
+      height: 240px;
+    }
+    .line-chart-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      overflow: visible;
+    }
+    .line-point {
+      cursor: pointer;
+      transition: transform 0.15s ease, filter 0.15s ease;
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+    .line-point:hover {
+      transform: scale(1.4);
+      filter: drop-shadow(0 2px 6px rgba(55, 104, 216, 0.4));
+    }
+
+    /* Global Cursor-Floating Tooltip */
+    .global-hover-tooltip {
+      position: fixed;
+      display: none;
+      background: #172033;
+      color: #ffffff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      pointer-events: none;
+      white-space: normal;
+      max-width: 280px;
+      z-index: 9999;
+      transform: translate(-50%, -100%);
+      margin-top: -10px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.28);
+      line-height: 1.4;
+    }
+    .global-hover-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -5px;
+      border-width: 5px;
+      border-style: solid;
+      border-color: #172033 transparent transparent transparent;
+    }
+
+    .popup {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      align-items: center; justify-content: center; padding: 20px;
+      background: rgba(15, 23, 42, .45);
+    }
+    .popup.open { display: flex; }
+    .popup-box {
+      width: min(650px, 100%); padding: 24px; background: white;
+      border-radius: 18px; box-shadow: 0 24px 80px rgba(0,0,0,.2);
+      max-height: 80vh; overflow-y: auto;
+    }
+    .popup-box h3 { margin: 0 0 8px; font-size: 1.25rem; }
+    .popup-box p { margin: 0 0 16px; font-size: .95rem; line-height: 1.6; color: var(--ink); }
+    .popup-meta { display: flex; gap: 12px; font-size: .85rem; color: var(--muted); margin-bottom: 12px; }
+    .popup-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+    
+    .grouped-item {
+      padding: 12px 0; border-bottom: 1px solid var(--line);
+    }
+    .grouped-item:last-child { border-bottom: none; }
+    
+    button.primary {
+      border: 0; border-radius: 9px; padding: 10px 16px;
+      background: var(--accent); color: white; font: inherit; font-weight: 700; cursor: pointer;
+    }
+
+    .table-container { max-height: 320px; overflow-y: auto; margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; text-align: left; }
+    th { background: #f8fafc; padding: 10px; position: sticky; top: 0; border-bottom: 1px solid var(--line); }
+    td { padding: 10px; border-bottom: 1px solid #edf2f7; }
+    tr:hover { background: #f1f5f9; cursor: pointer; }
+
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+      <img src="logo.png" style="height: 54px; width: auto; object-fit: contain;">
+      <div>
+        <p class="eyebrow" style="margin: 0;"><span style="color: #e25f75;">NO</span>bel Prize Obsession</p>
+        <h1 style="margin: 0;">Nobel Peace Prize Mentions by Donald Trump</h1>
+      </div>
+    </div>
+    <p>Explore public statements and posts of Trump mentioning the Nobel Peace Prize from 1998 until today.</p>
+  </header>
+
+  <section class="filter-card">
+    <p class="eyebrow">Reactive Global Filter</p>
+    <h2>Filter by Date Range</h2>
+    <p>Adjust the date range below. All charts, KPI summary cards, and the table reactively update in place.</p>
+    
+    <div class="slider-group">
+      <div class="slider-row">
+        <label for="start-date-range">Start Date</label>
+        <input id="start-date-range" type="range" min="0" max="100" value="0">
+        <output id="start-date-val">1998-09-28</output>
+      </div>
+      <div class="slider-row">
+        <label for="end-date-range">End Date</label>
+        <input id="end-date-range" type="range" min="0" max="100" value="100">
+        <output id="end-date-val">2026-10-10</output>
+      </div>
+    </div>
+
+    <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: relative;">
+      <label style="font-weight: 700; font-size: .9rem;">Record Type:</label>
+      <div class="multiselect-container" style="position: relative; display: inline-block;">
+        <button type="button" id="type-dropdown-btn" style="padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #f0f4f9; font-weight: 600; font-size: .88rem; cursor: pointer; color: var(--ink); display: flex; align-items: center; gap: 8px;">
+          <span id="type-dropdown-label">All Types Selected</span>
+          <span style="font-size: 0.75rem;">▼</span>
+        </button>
+        <div id="type-dropdown-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 6px; background: #ffffff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 10px; z-index: 500; min-width: 220px; max-height: 250px; overflow-y: auto;">
+          <label style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-weight: 700; font-size: .88rem; cursor: pointer; border-bottom: 1px solid var(--line); margin-bottom: 4px;">
+            <input type="checkbox" id="select-all-types" checked style="accent-color: var(--accent); cursor: pointer;">
+            <span>Select All</span>
+          </label>
+          <div id="type-checkbox-options"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preset-btns">
+      <button class="preset-btn" onclick="setPreset('all')">All Time (1998–2026)</button>
+      <button class="preset-btn" onclick="setPreset('trump1')">Trump First Term</button>
+      <button class="preset-btn" onclick="setPreset('biden')">Biden Years</button>
+      <button class="preset-btn" onclick="setPreset('nobel2025')">2025 Nobel Week</button>
+      <button class="preset-btn" onclick="setPreset('2025-2026')">2025–2026 Second Term</button>
+      <button class="preset-btn" onclick="setPreset('oct2026')">Oct 2026 Nobel Week</button>
+    </div>
+  </section>
+
+  <div class="kpi-grid" id="kpi-container"></div>
+
+  <div class="grid">
+    <section class="card">
+      <p class="eyebrow">01 · Format Breakdown</p>
+      <h2>Statements by Record Type</h2>
+      <p class="note">Total count of statements in filtered date range.</p>
+      <div id="type-chart" class="chart"></div>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">02 · Annual Frequency</p>
+      <h2>Statements by Year</h2>
+      <p class="note">Annual statement frequency within selected date range.</p>
+      <div id="year-chart" class="chart"></div>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">03 · Speaking Length</p>
+      <h2>Avg Speech Duration (Seconds)</h2>
+      <p class="note">Average time spent talking about the prize when brought up. Based on Roll Call's metrics.</p>
+      <div id="duration-chart" class="chart"></div>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">04 · Geographic Distribution</p>
+      <h2>Top Event Locations</h2>
+      <p class="note">Locations with highest number of statement occurrences.</p>
+      <div id="location-chart" class="chart"></div>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">05 · Format Share</p>
+      <h2>Record Type Distribution</h2>
+      <p class="note">Percentage proportions across record types (hover slice to explode & view details).</p>
+      <div id="pie-chart" class="chart pie-container"></div>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">06 · Cumulative Growth</p>
+      <h2>Cumulative Statement Volume</h2>
+      <p class="note">Running total of recorded statements across the filtered timeline (downsampled for ease of reading).</p>
+      <div id="line-chart" class="chart line-chart-container"></div>
+    </section>
+
+    <section class="card wide">
+      <p class="eyebrow">07 · Chronological Horizontal Timeline</p>
+      <h2>Event Timeline</h2>
+      <p class="note">Closely positioned occurrences are clustered into larger grouped nodes; click to expand all events in the popup.</p>
+      <div class="timeline-wrapper" id="timeline-wrapper">
+        <svg id="timeline-svg" class="timeline-svg" viewBox="0 0 900 130"></svg>
+      </div>
+      <div class="legend">
+        <span><i class="swatch" style="background:#3768d8"></i>Speech</span>
+        <span><i class="swatch" style="background:#a16be0"></i>Social Media</span>
+        <span><i class="swatch" style="background:#19a77a"></i>Remarks</span>
+        <span><i class="swatch" style="background:#f0a23b"></i>Press Gaggle</span>
+        <span><i class="swatch" style="background:#e25f75"></i>Interview</span>
+        <span><i class="swatch" style="background:#06b6d4"></i>Presser</span>
+        <span><i class="swatch" style="background:#475569"></i>Grouped Node (>1 Type)</span>
+      </div>
+    </section>
+
+    <section class="card wide">
+      <p class="eyebrow">08 · Filtered Data Table</p>
+      <h2>Filtered Statements List</h2>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Location</th>
+              <th>Duration</th>
+              <th>Excerpt Snippet</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; color: var(--muted); font-size: 0.85rem; gap: 12px;">
+    <div>
+      <p style="margin: 0; color: var(--muted);">Data Source & Categorization by <a href="http://rollcall.com/factbase/trump/search/" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-weight: 600; text-decoration: none;">Roll Call</a>.</p>
+      <p style="margin: 0; color: var(--muted);">Chart library by <a href="https://rhp.vercel.app" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-weight: 600; text-decoration: none;">reactive html plots (rhp)</a>.</p>
+    </div>
+    <div>
+    <p style="margin: 0; color: var(--muted);">Project by <a href="https://landing.robertjarosh.com" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-weight: 600; text-decoration: none;">Robert</a>.</p>
+      <p style="margin: 0; color: var(--muted);"><strong>Notes: </strong>Trump's mentions of a Noble [sic] Prize are included.</p>
+    </div>
+  </footer>
+</main>
+
+<div id="global-hover-tooltip" class="global-hover-tooltip"></div>
+
+<div id="detail-popup" class="popup" role="dialog" aria-modal="true">
+  <div class="popup-box">
+    <p class="eyebrow" id="popup-eyebrow">Statement Detail</p>
+    <h3 id="popup-title">Title</h3>
+    <div id="popup-content"></div>
+    <div class="popup-actions"><button class="primary" id="popup-close" type="button">Close</button></div>
+  </div>
+</div>
+
+<script type="module">
+  import { Chart, Plot, Bar, Label, html, render, createSignal } 
+    from "https://cdn.jsdelivr.net/npm/@bezda/rhp@2/dist/standalone.js";
+  import { rawData } from "./data.js";
+
+  const allDates = Array.from(new Set(rawData.map(d => d.date))).sort();
+  const maxDateIndex = allDates.length - 1;
+
+  const theme = {
+    series: ["#3768d8", "#19a77a", "#f0a23b", "#a16be0", "#e25f75"],
+    ink: "#172033", muted: "#657187", grid: "#e1e7f0", surface: "#ffffff", font: "system-ui, sans-serif"
+  };
+
+  const typeColors = {
+    "Speech": "#3768d8",
+    "Social Media": "#a16be0",
+    "Remarks": "#19a77a",
+    "Press Gaggle": "#f0a23b",
+    "Interview": "#e25f75",
+    "Presser": "#06b6d4",
+    "Press Conference": "#06b6d4"
+  };
+
+  const [startIndex, setStartIndex] = createSignal(0);
+  const [endIndex, setEndIndex] = createSignal(maxDateIndex);
+  const [selectedTypes, setSelectedTypes] = createSignal(new Set());
+
+  // Global Tooltip Helper Functions
+  window.showTooltip = (evt, htmlContent) => {
+    const tooltip = document.getElementById("global-hover-tooltip");
+    tooltip.innerHTML = htmlContent;
+    tooltip.style.left = `${evt.clientX}px`;
+    tooltip.style.top = `${evt.clientY}px`;
+    tooltip.style.display = "block";
+  };
+
+  window.hideTooltip = () => {
+    const tooltip = document.getElementById("global-hover-tooltip");
+    tooltip.style.display = "none";
+  };
+
+  const filteredData = () => {
+    const startDate = allDates[startIndex()];
+    const endDate = allDates[endIndex()];
+    const typesSet = selectedTypes();
+    return rawData.filter(d => {
+      const matchDate = d.date >= startDate && d.date <= endDate;
+      const matchType = typesSet.size === 0 || typesSet.has(d.type);
+      return matchDate && matchType;
+    });
+  };
+
+  const formatDuration = (sec) => {
+    if (!sec || sec <= 0) return "-";
+    const m = Math.floor(sec / 60);
+    const s = Math.round(sec % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
+
+  const clearContainer = (id) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+    return el;
+  };
+
+  const renderKPIs = () => {
+    const data = filteredData();
+    const totalCount = data.length;
+    const totalDurationSec = data.reduce((acc, curr) => acc + (curr.duration || 0), 0);
+    const uniqueEvents = new Set(data.map(d => d.title)).size;
+    const uniqueLocs = new Set(data.map(d => d.place)).size;
+
+    const container = document.getElementById("kpi-container");
+    container.innerHTML = `
+      <div class="kpi-card"><div class="kpi-value">${totalCount}</div><div class="kpi-label">Total Mentions</div></div>
+      <div class="kpi-card"><div class="kpi-value">${uniqueEvents}</div><div class="kpi-label">Unique Events</div></div>
+      <div class="kpi-card"><div class="kpi-value">${formatDuration(totalDurationSec)}</div><div class="kpi-label">Total Duration</div></div>
+      <div class="kpi-card"><div class="kpi-value">${uniqueLocs}</div><div class="kpi-label">Unique Locations</div></div>
+    `;
+  };
+
+  // 01. STATEMENTS BY FORMAT CHART
+  const renderTypeChart = () => {
+    const data = filteredData();
+    const counts = {};
+    data.forEach(d => counts[d.type] = (counts[d.type] || 0) + 1);
+    
+    const activeTypes = Object.keys(counts).filter(t => counts[t] > 0);
+    const countsArr = activeTypes.map(t => counts[t]);
+    const colorsArr = activeTypes.map(t => typeColors[t] || "#3768d8");
+    const maxVal = Math.max(...countsArr, 1);
+
+    const FormatRow = (d) => html`
+      <div>
+        <${Label} edge="start">${() => d.type}<//>
+        <${Bar} to=${() => d.count} color=${() => d.color} />
+        <${Label} at=${() => d.count}>${() => d.count}<//>
+      </div>`;
+
+    const el = clearContainer("type-chart");
+    if (activeTypes.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted); font-size:.9rem;">No data for selected date range</p>';
+      return;
+    }
+
+    render(() => html`
+      <${Chart} scale=${[0, maxVal]} theme=${theme}>
+        <${Plot} type=${activeTypes} count=${countsArr} color=${colorsArr}>
+          ${FormatRow}
+        <//>
+      <//>`, el);
+  };
+
+  // 02. STATEMENTS BY YEAR CHART
+  const renderYearChart = () => {
+    const data = filteredData();
+    const yearCounts = {};
+    data.forEach(d => {
+      const y = d.date.substring(0, 4);
+      yearCounts[y] = (yearCounts[y] || 0) + 1;
+    });
+
+    const years = Object.keys(yearCounts).sort();
+    const countsArr = years.map(y => yearCounts[y]);
+    const maxVal = Math.max(...countsArr, 1);
+
+    const YearRow = (d) => html`
+      <div>
+        <${Label} edge="start">${() => d.year}<//>
+        <${Bar} to=${() => d.count} color="#3768d8" />
+        <${Label} at=${() => d.count}>${() => d.count}<//>
+      </div>`;
+
+    const el = clearContainer("year-chart");
+    if (years.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted); font-size:.9rem;">No data for selected date range</p>';
+      return;
+    }
+
+    render(() => html`
+      <${Chart} scale=${[0, maxVal]} theme=${theme}>
+        <${Plot} year=${years} count=${countsArr}>
+          ${YearRow}
+        <//>
+      <//>`, el);
+  };
+
+  // 03. AVERAGE DURATION CHART (SECONDS)
+  const renderDurationChart = () => {
+    const data = filteredData();
+    const durSums = {}, durCounts = {};
+    data.forEach(d => {
+      if (d.duration > 0) {
+        durSums[d.type] = (durSums[d.type] || 0) + d.duration;
+        durCounts[d.type] = (durCounts[d.type] || 0) + 1;
+      }
+    });
+
+    const types = Object.keys(durCounts).filter(t => durCounts[t] > 0);
+    const avgArr = types.map(t => Math.round(durSums[t] / durCounts[t]));
+    const colorsArr = types.map(t => typeColors[t] || "#3768d8");
+    const maxVal = Math.max(...avgArr, 10);
+
+    const DurationRow = (d) => html`
+      <div>
+        <${Label} edge="start">${() => d.type}<//>
+        <${Bar} to=${() => d.avg} color=${() => d.color} />
+        <${Label} at=${() => d.avg}>${() => d.avg}s<//>
+      </div>`;
+
+    const el = clearContainer("duration-chart");
+    if (types.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted); font-size:.9rem;">No video duration data for selected range</p>';
+      return;
+    }
+
+    render(() => html`
+      <${Chart} scale=${[0, maxVal]} theme=${theme}>
+        <${Plot} type=${types} avg=${avgArr} color=${colorsArr}>
+          ${DurationRow}
+        <//>
+      <//>`, el);
+  };
+
+  // 04. TOP LOCATIONS CHART
+  const renderLocationChart = () => {
+    const data = filteredData();
+    const locCounts = {};
+    data.forEach(d => {
+      if (d.place && d.place !== "Online") locCounts[d.place] = (locCounts[d.place] || 0) + 1;
+    });
+
+    const sortedLocs = Object.keys(locCounts).sort((a,b) => locCounts[b] - locCounts[a]).slice(0, 5);
+    const countsArr = sortedLocs.map(l => locCounts[l]);
+    const maxVal = Math.max(...countsArr, 1);
+
+    const LocationRow = (d) => html`
+      <div>
+        <${Label} edge="start">${() => d.place}<//>
+        <${Bar} to=${() => d.count} color="#19a77a" />
+        <${Label} at=${() => d.count}>${() => d.count}<//>
+      </div>`;
+
+    const el = clearContainer("location-chart");
+    if (sortedLocs.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted); font-size:.9rem;">No location data for selected date range</p>';
+      return;
+    }
+
+    render(() => html`
+      <${Chart} scale=${[0, maxVal]} theme=${theme}>
+        <${Plot} place=${sortedLocs} count=${countsArr}>
+          ${LocationRow}
+        <//>
+      <//>`, el);
+  };
+
+  // 07. REACTIVE INTERACTIVE PIE CHART
+  const renderPieChart = () => {
+    const data = filteredData();
+    const el = clearContainer("pie-chart");
+
+    if (data.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted); font-size:.9rem;">No data for selected date range</p>';
+      return;
+    }
+
+    const counts = {};
+    data.forEach(d => counts[d.type] = (counts[d.type] || 0) + 1);
+    const total = data.length;
+
+    const activeTypes = Object.keys(counts).filter(t => counts[t] > 0);
+    
+    const width = 200;
+    const height = 200;
+    const radius = Math.min(width, height) / 2 - 12;
+    const cx = width / 2;
+    const cy = height / 2;
+
+    let cumulativeAngle = -Math.PI / 2;
+    let paths = "";
+    let legendItems = "";
+
+    activeTypes.forEach((type) => {
+      const count = counts[type];
+      const percentage = (count / total) * 100;
+      const angle = (count / total) * Math.PI * 2;
+      
+      const startAngle = cumulativeAngle;
+      const endAngle = cumulativeAngle + angle;
+      const midAngle = startAngle + angle / 2;
+
+      const x1 = cx + radius * Math.cos(startAngle);
+      const y1 = cy + radius * Math.sin(startAngle);
+      const x2 = cx + radius * Math.cos(endAngle);
+      const y2 = cy + radius * Math.sin(endAngle);
+
+      const largeArcFlag = angle > Math.PI ? 1 : 0;
+      const pathData = activeTypes.length === 1 
+        ? `M ${cx - radius}, ${cy} A ${radius},${radius} 0 1,0 ${cx + radius},${cy} A ${radius},${radius} 0 1,0 ${cx - radius},${cy}`
+        : `M ${cx},${cy} L ${x1},${y1} A ${radius},${radius} 0 ${largeArcFlag},1 ${x2},${y2} Z`;
+
+      const color = typeColors[type] || "#3768d8";
+      const shiftX = Math.cos(midAngle) * 8;
+      const shiftY = Math.sin(midAngle) * 8;
+
+      paths += `
+        <path class="pie-slice" 
+              d="${pathData}" 
+              fill="${color}" 
+              data-type="${type}"
+              data-count="${count}"
+              data-pct="${percentage.toFixed(1)}"
+              data-shift-x="${shiftX}"
+              data-shift-y="${shiftY}">
+        </path>
+      `;
+
+      legendItems += `
+        <span class="pie-legend-item" data-type="${type}">
+          <i class="swatch" style="background:${color}"></i>${type}
+        </span>
+      `;
+
+      cumulativeAngle = endAngle;
+    });
+
+    el.innerHTML = `
+      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="overflow: visible;">
+        <g>${paths}</g>
+      </svg>
+      <div class="pie-details-panel" id="pie-details-panel">
+        <div class="pie-details-title" id="pie-details-title">Hover over a slice</div>
+        <div class="pie-details-stats" id="pie-details-stats">Displays count and percentage share</div>
+      </div>
+      <div class="legend" style="justify-content: center; margin-top: 10px;">
+        ${legendItems}
+      </div>
+    `;
+
+    const detailsTitle = el.querySelector('#pie-details-title');
+    const detailsStats = el.querySelector('#pie-details-stats');
+
+    const activateHighlight = (type) => {
+      const slice = el.querySelector(`.pie-slice[data-type="${type}"]`);
+      const legendItem = el.querySelector(`.pie-legend-item[data-type="${type}"]`);
+
+      if (slice) {
+        const shiftX = slice.getAttribute('data-shift-x');
+        const shiftY = slice.getAttribute('data-shift-y');
+        slice.style.transform = `translate(${shiftX}px, ${shiftY}px)`;
+        
+        const count = slice.getAttribute('data-count');
+        const pct = slice.getAttribute('data-pct');
+        
+        detailsTitle.textContent = type;
+        detailsStats.textContent = `${count} statements (${pct}% of total)`;
+      }
+
+      if (legendItem) {
+        legendItem.classList.add('highlighted');
+      }
+    };
+
+    const deactivateHighlight = (type) => {
+      const slice = el.querySelector(`.pie-slice[data-type="${type}"]`);
+      const legendItem = el.querySelector(`.pie-legend-item[data-type="${type}"]`);
+
+      if (slice) {
+        slice.style.transform = 'translate(0px, 0px)';
+      }
+      if (legendItem) {
+        legendItem.classList.remove('highlighted');
+      }
+
+      detailsTitle.textContent = "Hover over a slice";
+      detailsStats.textContent = "Displays count and percentage share";
+    };
+
+    el.querySelectorAll('.pie-slice').forEach(slice => {
+      const type = slice.getAttribute('data-type');
+      slice.addEventListener('mouseenter', () => activateHighlight(type));
+      slice.addEventListener('mouseleave', () => deactivateHighlight(type));
+    });
+
+    el.querySelectorAll('.pie-legend-item').forEach(item => {
+      const type = item.getAttribute('data-type');
+      item.addEventListener('mouseenter', () => activateHighlight(type));
+      item.addEventListener('mouseleave', () => deactivateHighlight(type));
+    });
+  };
+
+  // 08. REACTIVE CUMULATIVE LINE CHART
+  const renderLineChart = () => {
+    const data = filteredData();
+    const el = clearContainer("line-chart");
+
+    if (data.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted); font-size:.9rem; text-align:center; padding-top:40px;">No data for selected date range</p>';
+      return;
+    }
+
+    const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+    
+    const startTime = new Date(sorted[0].date).getTime();
+    const endTime = new Date(sorted[sorted.length - 1].date).getTime();
+    const timeSpan = Math.max(endTime - startTime, 1);
+
+    const datesMap = [];
+    let runningTotal = 0;
+
+    sorted.forEach(d => {
+      runningTotal += 1;
+      datesMap.push({
+        date: d.date,
+        type: d.type,
+        text: d.text,
+        time: new Date(d.date).getTime(),
+        count: runningTotal
+      });
+    });
+
+    const padding = { top: 20, right: 20, bottom: 35, left: 45 };
+    const viewBoxWidth = 500;
+    const viewBoxHeight = 220;
+
+    const maxVal = runningTotal;
+    const minVal = 0;
+
+    const chartW = viewBoxWidth - padding.left - padding.right;
+    const chartH = viewBoxHeight - padding.top - padding.bottom;
+
+    const points = datesMap.map((d) => {
+      const timeRatio = (d.time - startTime) / timeSpan;
+      const x = padding.left + (timeSpan === 0 ? 0.5 * chartW : timeRatio * chartW);
+      const y = padding.top + chartH - ((d.count - minVal) / Math.max(maxVal - minVal, 1)) * chartH;
+      return { 
+        x, 
+        y, 
+        date: d.date, 
+        type: d.type, 
+        text: d.text, 
+        count: d.count 
+      };
+    });
+
+    const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+    const areaD = `${pathD} L ${points[points.length - 1].x.toFixed(1)} ${padding.top + chartH} L ${points[0].x.toFixed(1)} ${padding.top + chartH} Z`;
+
+    let gridY = '';
+    const yTicks = 4;
+    for (let i = 0; i <= yTicks; i++) {
+      const val = Math.round((maxVal / yTicks) * i);
+      const y = padding.top + chartH - (i / yTicks) * chartH;
+      gridY += `
+        <line x1="${padding.left}" y1="${y}" x2="${viewBoxWidth - padding.right}" y2="${y}" stroke="#e1e7f0" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="${padding.left - 8}" y="${y + 4}" text-anchor="end" fill="#657187" font-size="10" font-weight="600">${val}</text>
+      `;
+    }
+
+    let ticksX = '';
+    const xTicks = 4;
+    for (let i = 0; i < xTicks; i++) {
+      const ratio = i / (xTicks - 1);
+      const tickTime = startTime + ratio * timeSpan;
+      const x = padding.left + ratio * chartW;
+      const dateLabel = new Date(tickTime).toISOString().split('T')[0];
+
+      ticksX += `
+        <line x1="${x}" y1="${padding.top + chartH}" x2="${x}" y2="${padding.top + chartH + 4}" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="${x}" y="${padding.top + chartH + 16}" text-anchor="middle" fill="#657187" font-size="9" font-weight="600">${dateLabel}</text>
+      `;
+    }
+
+    const step = Math.max(1, Math.floor(points.length / 30));
+    const sampledPoints = points.filter((_, idx) => idx % step === 0 || idx === points.length - 1);
+
+    const pointsSvg = sampledPoints.map((p) => {
+      const pointColor = typeColors[p.type] || "#3768d8";
+      const snippet = p.text ? p.text.substring(0, 60).replace(/"/g, '&quot;') + '...' : '';
+      return `
+        <circle class="line-point" 
+                cx="${p.x.toFixed(1)}" 
+                cy="${p.y.toFixed(1)}" 
+                r="4.5" 
+                fill="${pointColor}" 
+                stroke="#ffffff" 
+                stroke-width="1.5" 
+                data-date="${p.date}" 
+                data-type="${p.type}" 
+                data-count="${p.count}" 
+                data-snippet="${snippet}"/>
+      `;
+    }).join('');
+
+    el.innerHTML = `
+      <svg class="line-chart-svg" viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}" preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%;">
+        <defs>
+          <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#3768d8" stop-opacity="0.2"/>
+            <stop offset="100%" stop-color="#3768d8" stop-opacity="0.0"/>
+          </linearGradient>
+        </defs>
+        ${gridY}
+        ${ticksX}
+        <path d="${areaD}" fill="url(#lineGrad)" />
+        <path d="${pathD}" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        ${pointsSvg}
+      </svg>
+    `;
+
+    el.querySelectorAll('.line-point').forEach(pt => {
+      const dStr = pt.getAttribute('data-date');
+      const pType = pt.getAttribute('data-type');
+      const cNum = pt.getAttribute('data-count');
+      const snippet = pt.getAttribute('data-snippet');
+      
+      const tooltipContent = `<strong>${dStr} (${pType})</strong><br/>Total: ${cNum}<br/><span style="font-weight:400; font-size:11px; opacity:0.85;">"${snippet}"</span>`;
+
+      pt.addEventListener('mousemove', (evt) => showTooltip(evt, tooltipContent));
+      pt.addEventListener('mouseleave', hideTooltip);
+    });
+  };
+
+  // 05. SINGLE-AXIS CLUSTERED DOT TIMELINE
+  let activeClusters = [];
+  const renderDotTimeline = () => {
+    const svg = document.getElementById("timeline-svg");
+    const data = filteredData();
+
+    if (data.length === 0) {
+      svg.innerHTML = `<text x="450" y="65" text-anchor="middle" fill="#657187">No statements found in selected date range</text>`;
+      return;
+    }
+
+    const minTime = new Date(allDates[startIndex()]).getTime();
+    const maxTime = new Date(allDates[endIndex()]).getTime();
+    const timeSpan = Math.max(maxTime - minTime, 1);
+
+    const paddingX = 70;
+    const width = 900 - paddingX * 2;
+    const axisY = 65;
+
+    let ticksHtml = `<line x1="${paddingX}" y1="${axisY}" x2="${900 - paddingX}" y2="${axisY}" stroke="#cbd5e1" stroke-width="2"/>`;
+
+    const numTicks = 7;
+    for (let i = 0; i < numTicks; i++) {
+      const ratio = i / (numTicks - 1);
+      const tickTime = minTime + ratio * timeSpan;
+      const x = paddingX + ratio * width;
+      const dateObj = new Date(tickTime);
+      const dStr = dateObj.toISOString().split('T')[0];
+
+      ticksHtml += `
+        <line x1="${x}" y1="${axisY - 5}" x2="${x}" y2="${axisY + 5}" stroke="#64748b" stroke-width="1.5"/>
+        <text x="${x}" y="${axisY + 22}" text-anchor="middle" fill="#64748b" font-size="11" font-weight="600">${dStr}</text>
+      `;
+    }
+
+    const items = data.map((item, idx) => {
+      const t = new Date(item.date).getTime();
+      const baseX = paddingX + ((t - minTime) / timeSpan) * width;
+      return { ...item, origIdx: idx, baseX };
+    }).sort((a, b) => a.baseX - b.baseX);
+
+    const maxClusterSize = 5;
+    const threshold = 1.5;
+    const clusters = [];
+
+    items.forEach(item => {
+      if (clusters.length === 0) {
+        clusters.push([item]);
+      } else {
+        const lastCluster = clusters[clusters.length - 1];
+        const avgX = lastCluster.reduce((s, c) => s + c.baseX, 0) / lastCluster.length;
+        if (Math.abs(item.baseX - avgX) <= threshold && lastCluster.length < maxClusterSize) {
+          lastCluster.push(item);
+        } else {
+          clusters.push([item]);
+        }
+      }
+    });
+
+    activeClusters = clusters;
+
+    let dotsHtml = "";
+    clusters.forEach((cluster, clusterIdx) => {
+      const baseX = cluster.reduce((s, c) => s + c.baseX, 0) / cluster.length;
+      const count = cluster.length;
+      const r = count === 1 ? 4 : Math.min(4 + count * 1.2, 9);
+      
+      let fillColor = "#3768d8";
+      if (count === 1) {
+        fillColor = typeColors[cluster[0].type] || "#3768d8";
+      } else {
+        const types = new Set(cluster.map(c => c.type));
+        fillColor = types.size === 1 ? (typeColors[cluster[0].type] || "#3768d8") : "#475569";
+      }
+
+      const displayDate = cluster.length === 1 ? cluster[0].date : `${cluster[0].date} (${count} events)`;
+
+      dotsHtml += `
+        <g class="timeline-dot" transform="translate(${baseX}, ${axisY})" data-cluster-idx="${clusterIdx}" data-date="${displayDate}">
+          <circle cx="0" cy="0" r="${r}" fill="${fillColor}" stroke="#ffffff" stroke-width="1.5"/>
+          ${count > 1 ? `<text x="0" y="3" text-anchor="middle" fill="#ffffff" font-size="8" font-weight="800" pointer-events="none">${count}</text>` : ''}
+        </g>
+      `;
+    });
+
+    svg.innerHTML = ticksHtml + dotsHtml;
+
+    svg.querySelectorAll('.timeline-dot').forEach(el => {
+      const idx = parseInt(el.getAttribute('data-cluster-idx'), 10);
+      const dateStr = el.getAttribute('data-date');
+
+      el.addEventListener('mousemove', (evt) => showTooltip(evt, dateStr));
+      el.addEventListener('mouseleave', hideTooltip);
+      el.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        hideTooltip();
+        openClusterModal(idx);
+      });
+    });
+  };
+
+  window.openClusterModal = (clusterIdx) => {
+    const cluster = activeClusters[clusterIdx];
+    if (!cluster) return;
+
+    const popup = document.getElementById("detail-popup");
+    const titleEl = document.getElementById("popup-title");
+    const eyebrowEl = document.getElementById("popup-eyebrow");
+    const contentEl = document.getElementById("popup-content");
+
+    if (cluster.length === 1) {
+      const item = cluster[0];
+      eyebrowEl.textContent = `${item.date} · ${item.type}`;
+      titleEl.innerHTML = item.url 
+        ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:none;">${item.title || "Statement Detail"} ↗</a>`
+        : (item.title || "Statement Detail");
+      contentEl.innerHTML = `
+        <div class="popup-meta">Location: ${item.place} | Duration: ${formatDuration(item.duration)}</div>
+        <p>${item.text}</p>
+      `;
+    } else {
+      eyebrowEl.textContent = `Grouped Node (${cluster.length} Statements)`;
+      titleEl.textContent = `Events around ${cluster[0].date}`;
+      contentEl.innerHTML = cluster.map((item) => `
+        <div class="grouped-item">
+          <div class="eyebrow" style="margin-bottom:2px">${item.date} · ${item.type}</div>
+          <h4 style="margin:0 0 4px; font-size:1.05rem">${item.url ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:none;">${item.title} ↗</a>` : item.title}</h4>
+          <div class="popup-meta" style="margin-bottom:6px">Location: ${item.place} | Duration: ${formatDuration(item.duration)}</div>
+          <p style="margin:0">${item.text}</p>
+        </div>
+      `).join('');
+    }
+
+    popup.classList.add("open");
+  };
+
+  // DATA TABLE RENDER
+  let currentFilteredData = [];
+
+  const renderTable = () => {
+    currentFilteredData = filteredData();
+    const tbody = document.getElementById("table-body");
+    tbody.innerHTML = currentFilteredData.map((d, idx) => `
+      <tr data-table-idx="${idx}" style="cursor: pointer;">
+        <td><strong>${d.date}</strong></td>
+        <td><span class="swatch" style="background:${typeColors[d.type] || '#ccc'}"></span> ${d.type}</td>
+        <td>${d.place}</td>
+        <td>${formatDuration(d.duration)}</td>
+        <td>${d.text.substring(0, 70)}...</td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll("tr").forEach(row => {
+      row.addEventListener("click", () => {
+        const idx = parseInt(row.getAttribute("data-table-idx"), 10);
+        openTableItemModal(idx);
+      });
+    });
+  };
+
+  window.openTableItemModal = (idx) => {
+    const item = currentFilteredData[idx];
+    if (!item) return;
+
+    const popup = document.getElementById("detail-popup");
+    document.getElementById("popup-eyebrow").textContent = `${item.date} · ${item.type}`;
+    document.getElementById("popup-title").innerHTML = item.url 
+      ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:none;">${item.title || "Statement Detail"} ↗</a>`
+      : (item.title || "Statement Detail");
+    document.getElementById("popup-content").innerHTML = `
+      <div class="popup-meta">Location: ${item.place} | Duration: ${formatDuration(item.duration)}</div>
+      <p>${item.text}</p>
+    `;
+    popup.classList.add("open");
+  };
+
+  const updateUI = () => {
+    renderKPIs();
+    renderTypeChart();
+    renderYearChart();
+    renderDurationChart();
+    renderLocationChart();
+    renderPieChart();
+    renderLineChart();
+    renderDotTimeline();
+    renderTable();
+    document.getElementById("start-date-val").textContent = allDates[startIndex()];
+    document.getElementById("end-date-val").textContent = allDates[endIndex()];
+  };
+
+  const startRange = document.getElementById("start-date-range");
+  const endRange = document.getElementById("end-date-range");
+
+  startRange.addEventListener("input", (e) => {
+    const idx = Math.floor((e.target.value / 100) * maxDateIndex);
+    if (idx <= endIndex()) {
+      setStartIndex(idx);
+      updateUI();
+    }
+  });
+
+  endRange.addEventListener("input", (e) => {
+    const idx = Math.floor((e.target.value / 100) * maxDateIndex);
+    if (idx >= startIndex()) {
+      setEndIndex(idx);
+      updateUI();
+    }
+  });
+
+  window.setPreset = (type) => {
+    if (type === 'all') {
+      setStartIndex(0);
+      setEndIndex(maxDateIndex);
+    } else if (type === 'trump1') {
+      const s = allDates.findIndex(d => d >= '2017-05-18');
+      const e = allDates.findLastIndex(d => d <= '2020-10-28');
+      setStartIndex(s !== -1 ? s : 0);
+      setEndIndex(e !== -1 ? e : maxDateIndex);
+    } else if (type === 'biden') {
+      const s = allDates.findIndex(d => d >= '2022-09-06');
+      const e = allDates.findLastIndex(d => d <= '2024-10-24');
+      setStartIndex(s !== -1 ? s : 0);
+      setEndIndex(e !== -1 ? e : maxDateIndex);
+    } else if (type === 'nobel2025') {
+      const s = allDates.findIndex(d => d >= '2025-10-10');
+      const e = allDates.findLastIndex(d => d <= '2025-10-17');
+      setStartIndex(s !== -1 ? s : 0);
+      setEndIndex(e !== -1 ? e : maxDateIndex);
+    } else if (type === '2025-2026') {
+      const s = allDates.findIndex(d => d >= '2025-01-01');
+      setStartIndex(s !== -1 ? s : 0);
+      setEndIndex(maxDateIndex);
+    } else if (type === 'oct2026') {
+      const s = allDates.findIndex(d => d >= '2026-10-01');
+      setStartIndex(s !== -1 ? s : 0);
+      setEndIndex(maxDateIndex);
+    }
+    startRange.value = (startIndex() / maxDateIndex) * 100;
+    endRange.value = (endIndex() / maxDateIndex) * 100;
+    updateUI();
+  };
+
+  const popup = document.getElementById("detail-popup");
+  document.getElementById("popup-close").addEventListener("click", () => popup.classList.remove("open"));
+  popup.addEventListener("click", (e) => { if (e.target === popup) popup.classList.remove("open"); });
+
+  const typeBtn = document.getElementById("type-dropdown-btn");
+  const typeMenu = document.getElementById("type-dropdown-menu");
+  const typeLabel = document.getElementById("type-dropdown-label");
+  const selectAllCb = document.getElementById("select-all-types");
+  const optionsContainer = document.getElementById("type-checkbox-options");
+
+  const allTypes = Array.from(new Set(rawData.map(d => d.type))).filter(Boolean).sort();
+  setSelectedTypes(new Set(allTypes));
+
+  allTypes.forEach(t => {
+    const lbl = document.createElement("label");
+    lbl.style.cssText = "display: flex; align-items: center; gap: 8px; padding: 5px 8px; font-size: .88rem; cursor: pointer; border-radius: 4px;";
+    lbl.onmouseenter = () => lbl.style.background = "#f1f5f9";
+    lbl.onmouseleave = () => lbl.style.background = "transparent";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = t;
+    cb.checked = true;
+    cb.style.accentColor = "var(--accent)";
+    cb.style.cursor = "pointer";
+
+    cb.addEventListener("change", () => {
+      const current = new Set(selectedTypes());
+      if (cb.checked) current.add(t);
+      else current.delete(t);
+      
+      setSelectedTypes(current);
+      selectAllCb.checked = current.size === allTypes.length;
+      updateDropdownLabel();
+      updateUI();
+    });
+
+    const txt = document.createElement("span");
+    txt.textContent = t;
+
+    lbl.appendChild(cb);
+    lbl.appendChild(txt);
+    optionsContainer.appendChild(lbl);
+  });
+
+  selectAllCb.addEventListener("change", (e) => {
+    const isChecked = e.target.checked;
+    const current = isChecked ? new Set(allTypes) : new Set();
+    setSelectedTypes(current);
+
+    optionsContainer.querySelectorAll("input[type=checkbox]").forEach(cb => {
+      cb.checked = isChecked;
+    });
+
+    updateDropdownLabel();
+    updateUI();
+  });
+
+  const updateDropdownLabel = () => {
+    const size = selectedTypes().size;
+    if (size === allTypes.length) typeLabel.textContent = "All Types Selected";
+    else if (size === 0) typeLabel.textContent = "No Types Selected";
+    else typeLabel.textContent = `${size} of ${allTypes.length} Selected`;
+  };
+
+  typeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    typeMenu.style.display = typeMenu.style.display === "none" ? "block" : "none";
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!typeMenu.contains(e.target) && !typeBtn.contains(e.target)) {
+      typeMenu.style.display = "none";
+    }
+  });
+
+  // Close detail popup on Escape key press
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      popup.classList.remove("open");
+    }
+  });
+
+  updateUI();
+</script>
+</body>
+</html>
